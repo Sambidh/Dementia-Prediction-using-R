@@ -1,0 +1,530 @@
+---
+title: "DementiaPrediction"
+author: "Sambidh"
+date: "2025-11-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+data = read.csv("ICT583 s2 2025 dataset.csv",
+                sep = ",", header = TRUE)
+data
+```
+
+```{r}
+head(data)
+```
+
+```{r}
+str(data)
+```
+
+```{r}
+names(data)
+```
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+categorical = c("Hyperlipidaemia", "Mobility", "Education_ID", "MNAa_q3", "MMSE_class")
+
+continuous = c("Age", "body_height", "body_weight", "MNAa_tot", "MNAb_tot", "waist", "BMI")
+
+data %>%  select(all_of(categorical)) %>% map(table)
+```
+
+```{r}
+# Standard Deviation for Continuous variable (SD only applicable to continuous data)
+data %>% select(all_of(continuous)) %>%
+  map(., ~{
+    c(
+      Mean = mean(.x, na.rm = T) %>% round(2),
+      SD = sd(.x, na.rm = T) %>% round(2)
+    )
+  })
+```
+
+```{r}
+data %>%
+  select(all_of(continuous)) %>%
+  map(~{
+    c(
+      Mean = mean(.x, na.rm = TRUE),
+      SD = sd(.x, na.rm = TRUE),
+      Median = median(.x, na.rm = TRUE),
+      Min = min(.x, na.rm = TRUE),
+      Max = max(.x, na.rm = TRUE),
+      IQR = IQR(.x, na.rm = TRUE)
+    ) %>% round(2)
+  })
+```
+
+```{r}
+# Select numeric variables
+numeric_vars <- data %>% select_if(is.numeric)
+
+# Apply Shapiro-Wilk test to each variable
+shapiro_results <- sapply(numeric_vars, function(x) {
+  if (length(unique(na.omit(x))) < 3) return(NA)  # skip constant or short variables
+  shapiro.test(x)$p.value
+})
+
+# Display results
+shapiro_results
+```
+
+```{r}
+numeric_vars %>%
+  gather(key = "variable", value = "value") %>%
+  ggplot(aes(x = value)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+  facet_wrap(~variable, scales = "free") +
+  theme_minimal() +
+  labs(title = "Histogram of Continuous Variables", x = "Value", y = "Frequency")
+```
+
+```{r}
+data %>%
+  summarize(N = n(), r = cor(Age, MMSE_class, 
+                             use = "pairwise.complete.obs"))
+```
+
+```{r}
+corr = data %>% 
+  select_if(is.numeric) %>% 
+  cor(., method = "spearman", use = "pairwise.complete.obs") %>% 
+  round(3)
+
+corr %>% write.csv("corr_pearson.csv")
+
+corr
+```
+
+```{r}
+heatmap(corr, main = "Correlation Heatmap (Pearson)", 
+        Colv = NA, Rowv = NA, scale = "none", 
+        col = colorRampPalette(c("blue", "white", "red"))(200))
+```
+
+```{r}
+library(ggplot2)
+library(reshape2)
+
+# Convert matrix to long format
+corr_melt <- melt(corr)
+
+# Plot heatmap
+ggplot(corr_melt, aes(Var1, Var2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1,1), space = "Lab", 
+                       name = "Spearman\nCorrelation") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+                                   size = 10, hjust = 1)) +
+  coord_fixed() +
+  labs(title = "Correlation Heatmap",
+       x = "", y = "")
+
+ggsave("correlation.png", width = 5, height = 3)
+```
+
+```{r}
+# install.packages("corrplot")
+library(corrplot)
+
+corrplot(corr, 
+         method = "color", 
+         type = "upper", 
+         tl.col = "black", 
+         tl.srt = 45, 
+         addCoef.col = "black",
+         col = colorRampPalette(c("blue", "white", "red"))(200),
+         title = "Correlation Heatmap (Pearson)", 
+         mar = c(0,0,2,0))
+```
+
+```{r}
+library(dplyr)
+# install.packages("gt")
+library(gt)
+library(VIM)
+```
+
+```{r}
+data %>% 
+  is.na() %>% 
+  colSums()
+```
+
+```{r}
+f <- function(x) sum(is.na(x))
+
+missingSumarry <- apply(data, 2, f) %>% 
+  as.data.frame() %>% 
+  tibble::rownames_to_column("Variable")
+
+missingSumarry %>% 
+  gt() %>% 
+  tab_header(title = "Missing data in variables")
+```
+
+```{r}
+library(VIM)
+```
+
+```{r}
+age_imputed <- hotdeck(
+  data,
+  variable = "Age",
+  ord_var = c("Education_ID", "Mobility", "MNAa_q3", "MMSE_class")
+)
+
+age_imputed %>% 
+  select(Age, BMI, Age_imp) %>% 
+  marginplot(delimiter = "imp")
+```
+
+```{r}
+body_height_imputed <- hotdeck(
+  age_imputed,
+  variable = "body_height",
+  ord_var = c("Age")
+)
+
+body_height_imputed %>% 
+  select(body_height, Age, body_height_imp) %>% 
+  marginplot(delimiter = "imp")
+```
+
+```{r}
+MNAb_tot_imputed <- hotdeck(
+  body_height_imputed,
+  variable = "MNAb_tot",
+  ord_var = c("MNAa_tot")
+)
+# MNAb_tot_imputed
+
+MNAb_tot_imputed %>% 
+  select(MNAb_tot, BMI, MNAb_tot_imp) %>% 
+  marginplot(delimiter = "imp")
+```
+
+```{r}
+Education_ID_imputed <- hotdeck(
+  MNAb_tot_imputed,
+  variable = "Education_ID",
+  ord_var = c("Age")
+)
+# Education_ID_imputed
+
+Education_ID_imputed %>% 
+  select(Education_ID, Age, Education_ID_imp) %>% 
+  marginplot(delimiter = "imp")
+```
+
+```{r}
+MNAa_q3_Imp <- hotdeck(
+  Education_ID_imputed,
+  variable = "MNAa_q3",
+  ord_var = c("Age")
+)
+# MNAa_q3_Imp
+
+MNAa_q3_Imp %>% 
+  select(MNAa_q3, Age, MNAa_q3_imp) %>% 
+  marginplot(delimiter = "imp")
+```
+
+```{r}
+body_weight_Imp <- hotdeck(
+  MNAa_q3_Imp,
+  variable = "body_weight",
+  ord_var = c("MNAa_tot", "waist")
+)
+# body_weight_Imp
+
+body_weight_Imp %>% 
+  select(body_weight, Age, body_weight_imp) %>% 
+  marginplot(delimiter = "imp")
+```
+
+```{r}
+waist_Imp <- hotdeck(
+  body_weight_Imp,
+  variable = "waist",
+  ord_var = c("BMI")
+)
+# waist_Imp
+
+waist_Imp %>% 
+  select(waist, Age, waist_imp) %>% 
+  marginplot(delimiter = "imp")
+```
+
+```{r}
+bmi_Imp <- hotdeck(
+  waist_Imp,
+  variable = "BMI",
+  ord_var = c("waist")
+)
+# bmi_Imp
+
+bmi_Imp %>% 
+  select(BMI, Age, BMI_imp) %>% 
+  marginplot(delimiter = "imp")
+```
+
+```{r}
+MNAa_tot_Imp <- hotdeck(
+  bmi_Imp,
+  variable = "MNAa_tot",
+  ord_var = c("MNAb_tot")
+)
+# MNAa_tot_Imp
+
+MNAa_tot_Imp %>% 
+  select(MNAa_tot, Age, MNAa_tot_imp) %>% 
+  marginplot(delimiter = "imp")
+```
+
+```{r}
+Hyperlipidaemia_Imp <- hotdeck(
+  MNAa_tot_Imp,
+  variable = "Hyperlipidaemia",
+  ord_var = c("MNAb_tot", "Age")
+)
+# Hyperlipidaemia_Imp
+
+Hyperlipidaemia_Imp %>% 
+  select(Hyperlipidaemia, Age, Hyperlipidaemia_imp) %>% 
+  marginplot(delimiter = "imp")
+```
+
+```{r}
+mobility_imputed <- VIM::kNN(Hyperlipidaemia_Imp, k = 5, variable = "Mobility")
+mobility_imputed
+
+
+summary(mobility_imputed)
+
+mobility_imputed %>% 
+    select(Mobility, Age, Mobility_imp) %>% 
+    marginplot(delimiter = "imp", main = "k = 5")
+```
+
+\
+
+```{r}
+data1 <- mobility_imputed %>% mutate_if(~n_distinct(.) > 2, scale)
+
+```
+
+```{r}
+# Load caret package
+library(caret)
+
+# Set seed for reproducibility
+set.seed(1)
+
+# Let's assume your final preprocessed dataset is named 'data2'
+# and your target/output variable is 'MMSE_class'
+
+# Create partition: 70% for training
+id <- createDataPartition(data1$MMSE_class, p = 0.7, list = FALSE)
+
+# Split the data
+training <- data1[id, ]
+testing  <- data1[-id, ]
+
+# Check the dimensions
+dim(training)
+dim(testing)
+
+# Optional: check class balance in both datasets
+prop.table(table(training$MMSE_class))
+prop.table(table(testing$MMSE_class))
+```
+
+```{r}
+form1 = MMSE_class ~ Age + Education_ID + Mobility + body_height + 
+         MNAa_q3 + body_weight + MNAb_tot + waist + BMI + 
+         MNAa_tot + Hyperlipidaemia
+```
+
+```{r}
+# Logistic Regression Model
+lr_model <- glm( form1, binomial, training)
+
+s = summary(lr_model)
+s
+```
+
+```{r}
+lr_coef = s $ coefficients %>% as.data.frame() %>%
+  mutate( odds_ratio = exp(Estimate)) %>% round(3)
+
+# lr_coef %>% write.csv("lr_coef.csv")
+
+lr_coef
+```
+
+```{r}
+lr_prob = predict(lr_model, testing, "response")
+
+str(lr_prob)
+```
+
+```{r}
+lr_pred = lr_prob %>% round 
+
+str(lr_pred)
+```
+
+```{r}
+lr_perf = table(lr_pred, testing$MMSE_class) %>% 
+  confusionMatrix(., positive = "1")
+lr_perf
+```
+
+```{r}
+library(pROC)
+lr_roc = roc(testing$MMSE_class, lr_prob)
+lr_roc
+```
+
+```{r}
+training$MMSE_class <- as.factor(training$MMSE_class)
+testing$MMSE_class  <- as.factor(testing$MMSE_class)
+```
+
+```{r}
+library(e1071)
+
+svm_model <- svm(form1, data = training, 
+                 type = "C-classification", 
+                 kernel = "radial", 
+                 probability = TRUE)
+
+summary(svm_model)
+```
+
+```{r}
+svm_pred <- predict(svm_model, newdata = testing)
+str(svm_pred)
+```
+
+```{r}
+svm_prob = predict(svm_model, testing, probability = T) %>%
+   attr("probabilities") %>% .[,1]
+
+str(svm_prob)
+```
+
+```{r}
+library(caret)
+svm_perf <- confusionMatrix(svm_pred, testing$MMSE_class, positive = "1")
+svm_perf
+```
+
+```{r}
+svm_roc = roc(testing$MMSE_class, svm_prob)
+svm_roc
+
+perf_metrices=
+cbind.data.frame(
+  lr = c(lr_perf$overall, lr_perf$byClass, AUC = lr_roc$auc),
+  svm = c(svm_perf$overall, svm_perf$byClass, AUC = svm_roc$auc)
+  ) %>%
+  round(3) %>%
+  mutate(best = apply(., 1, which.max)) 
+
+perf_metrices%>%
+  write.csv("perf_metrices.csv")
+
+perf_metrices
+
+```
+
+```{r}
+training$MMSE_class <- factor(training$MMSE_class,
+                              levels = c("0", "1"),
+                              labels = c("NoDementia", "Dementia"))
+
+testing$MMSE_class <- factor(testing$MMSE_class,
+                             levels = c("0", "1"),
+                             labels = c("NoDementia", "Dementia"))
+
+
+# ---------- Random Forest (caret) ----------
+rf_caret <- train(
+  form1,
+  data = training,
+  method = "rf",
+  metric = "ROC",
+  trControl = trctrl,
+  tuneLength = 5
+)
+
+# ---------- Decision Tree (rpart via caret) ----------
+dt_caret <- train(
+  form1,
+  data = training,
+  method = "rpart",
+  metric = "ROC",
+  trControl = trctrl,
+  tuneLength = 10
+)
+
+# ---------- Get predicted probabilities on test set ----------
+# caret models: predict(..., type = "prob") returns a data.frame of class probs
+lr_prob_caret  <- predict(lr_caret, testing, type = "prob")[, "1"]   # prob of class "1"
+svm_prob       <- predict(svm_caret, testing, type = "prob")[, "1"]
+rf_prob        <- predict(rf_caret, testing, type = "prob")[, "1"]
+dt_prob        <- predict(dt_caret, testing, type = "prob")[, "1"]
+
+# If you prefer original glm: lr_prob <- predict(lr_model, testing, type = "response")
+
+# ---------- Compute ROC / AUC (pROC) ----------
+# Ensure response passed to roc() is the factor of true labels
+lr_roc <- roc(response = testing$MMSE_class, predictor = lr_prob_caret, levels = c("0","1"), direction = "<")
+svm_roc <- roc(response = testing$MMSE_class, predictor = svm_prob, levels = c("0","1"), direction = "<")
+rf_roc  <- roc(response = testing$MMSE_class, predictor = rf_prob, levels = c("0","1"), direction = "<")
+dt_roc  <- roc(response = testing$MMSE_class, predictor = dt_prob, levels = c("0","1"), direction = "<")
+
+# AUC values
+auc_vals <- c(
+  LR = as.numeric(lr_roc$auc),
+  SVM = as.numeric(svm_roc$auc),
+  RF = as.numeric(rf_roc$auc),
+  DT = as.numeric(dt_roc$auc)
+)
+print(round(auc_vals, 3))
+
+# ---------- Plot multiple ROC curves with ggroc ----------
+# Combine roc objects in a list and plot. legacy.axes = TRUE gives 1-specificity on x-axis
+roc_list <- list(
+  paste0("Logistic regression, AUC ", round(lr_roc$auc, 3)) = lr_roc,
+  paste0("SVM, AUC ", round(svm_roc$auc, 3)) = svm_roc,
+  paste0("Random Forest, AUC ", round(rf_roc$auc, 3)) = rf_roc,
+  paste0("Decision Tree, AUC ", round(dt_roc$auc, 3)) = dt_roc
+)
+
+ggroc(roc_list, legacy.axes = TRUE) +
+  labs(x = "1 - Specificity", y = "Sensitivity", color = "Model") +
+  theme_classic() +
+  theme(legend.position = c(0.8, 0.2))
+
+# ---------- Optional: show confusion matrices (use a threshold 0.5 or tune threshold) ----------
+pred_lr_class <- factor(ifelse(lr_prob_caret >= 0.5, "1", "0"), levels = c("0","1"))
+confusionMatrix(pred_lr_class, testing$MMSE_class, positive = "1")
+
+# Repeat confusionMatrix for svm, rf, dt similarly using their prob vectors.
+
+```

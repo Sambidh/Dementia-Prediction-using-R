@@ -1,0 +1,20 @@
+"","lr","svm","best"
+"Accuracy",0.895,0.897,2
+"Kappa",0.616,0.626,2
+"AccuracyLower",0.874,0.876,2
+"AccuracyUpper",0.913,0.915,2
+"AccuracyNull",0.842,0.842,1
+"AccuracyPValue",0,0,1
+"McnemarPValue",0.281,0.198,1
+"Sensitivity",0.705,0.718,2
+"Specificity",0.93,0.93,1
+"Pos Pred Value",0.655,0.659,2
+"Neg Pred Value",0.944,0.946,2
+"Precision",0.655,0.659,2
+"Recall",0.705,0.718,2
+"F1",0.679,0.687,2
+"Prevalence",0.158,0.158,1
+"Detection Rate",0.111,0.113,2
+"Detection Prevalence",0.17,0.172,2
+"Balanced Accuracy",0.818,0.824,2
+"AUC",0.937,0.91,1
